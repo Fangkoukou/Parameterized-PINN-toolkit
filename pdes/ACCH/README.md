@@ -7,23 +7,17 @@ This directory contains a complete example of using the `pinn_toolkit` to train 
 ## File Breakdown
 
 The key files in this example are:
+-   **`model.py`**: Defines the core `PINN` class, which is the neural network itself. It is built as an `equinox.Module`, integrating seamlessly with JAX's functional paradigm. **This is the main module to customize for new mode architectures.**
+-   **`residual.py`**: Defines the physics of the problem by translating PDEs, ICs, and BCs into trainable residuals. **This is the main module to customize for new PDEs.**
+-   **`pde_dimless.py`**: A PDE class defining the non-dimensionalized ACCH system, built on `diffrax`. Its primary role is to generate ground-truth data for training and validation.
+-   **`interactive_pde_suite.py`**: A powerful tool for real-time exploration of a Cahn-Hilliard/Allen-Cahn PDE system. Can be used to compare the numerical PDE solution against a trained PINN model to visually assess the model's accuracy across different physical parameters.
+-   **`generate_data.py`**: A module dedicated to solving the 1D ACCH PDE system under different parameters (e.g. `L`: mobility parameter, `M`: diffusivity parameter) using parallel computing.
+-   **`train.ipynb`**: The main training notebook. It shows how to import components from `pinn_toolkit` to define the model, set up the loss functions, and run the training engine.
+-   **`validation.ipynb`**: An example notebook that uses the analysis suite from `pinn_toolkit/validation.py` to evaluate trained models and generate plots comparing multiple runs.
+-   **Other Notebooks**: Includes notebooks for generating data (`generate_data.ipynb`) and interactively exploring the PDE solutions (`interactive_pde_demo.ipynb`).
+-   
 
--   **`pde_dimless.py`**: A high-fidelity numerical solver for the ACCH system, built on `diffrax`. Its primary role is to generate the ground-truth data used for training and validation. It uses a dimensionless formulation to ensure numerical stability.
-
--   **`train.ipynb`**: The main training notebook. This is the best place to start. It demonstrates the complete workflow:
-    1.  Importing the necessary modules (`PINN`, `Residual`, `Derivative`, `Train`) from the `pinn_toolkit`.
-    2.  Defining the physical parameters and the model architecture.
-    3.  Setting up the specific loss functions for the ACCH residuals.
-    4.  Configuring and running the main training engine.
-
--   **`validation.ipynb`**: An example notebook that uses the analysis suite from `pinn_toolkit/validation.py` to evaluate the models trained by `train.ipynb`. It shows how to load results, compute error metrics, and generate comparison plots.
-
--   **`generate_data.ipynb`**: A utility notebook that uses `pde_dimless.py` to generate the HDF5 reference datasets needed for training and validation.
-
--   **`interactive_pde_demo.ipynb`**: A notebook with interactive widgets that allows you to explore the ACCH solution space by varying physical parameters and seeing the PINN's predictions in real-time.
-
--   **`_archive/`, `data/`, `models/`, `plots/`**: Folders containing experimental code, generated data, saved models, and plots for this specific PDE problem. These folders are ignored by Git as per the `.gitignore` file.
-
+`_archive` contains code that are outdated or incomplete. It'll be fixed in the future.
 ---
 
 ## How to Run This Example
