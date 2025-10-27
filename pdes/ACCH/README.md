@@ -17,7 +17,7 @@ The key files in this example are:
 -   **Other Notebooks**: Includes notebooks for generating data (`generate_data.ipynb`) and interactively exploring the PDE solutions (`interactive_pde_demo.ipynb`).
 -   
 
-`_archive` contains code that are outdated or incomplete. It'll be fixed in the future.
+#### `_archive` contains code that are outdated or incomplete. It'll be fixed in the future.
 ---
 
 ## How to Run This Example
