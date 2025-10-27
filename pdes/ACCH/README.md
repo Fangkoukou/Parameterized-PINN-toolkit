@@ -29,3 +29,5 @@ It is assumed you have already followed the installation instructions in the mai
 2.  **Train the Model:** Open and run the cells in `train.ipynb` from top to bottom. This will train a new PINN model and save the results (model weights and loss history) into the `pdes/ACCH/models/` directory.
 
 3.  **Analyze the Results:** Once training is complete, run the cells in `validation.ipynb` to see a detailed performance analysis of the model you just trained, some sample plots are stored inside plots.
+
+4.  Unfortunately, a detailed tutorial on how to write `model.py`, `residual.py`, `train.ipynb` and `validation.ipynb`is currently unavailable.
