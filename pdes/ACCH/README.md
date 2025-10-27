@@ -24,7 +24,7 @@ The key files in this example are:
 
 It is assumed you have already followed the installation instructions in the main `README.md` file and have activated the `jax-pinn-env` Conda environment.
 
-1.  ** (Required) Generate Your Own Data:** Please run the cells in `generate_data.ipynb` to generate the data for validation. Otherwise disable the validation option to avoid any potenital errors. The robustness will be improved in the future.
+1.  ** (Required) Generate Your Own Data:** Please run the cells in `generate_data.ipynb` to generate the data for validation. Otherwise disable the validation option in "train.py" to avoid any potenital errors. The robustness will be improved in the future.
 
 2.  **Train the Model:** Open and run the cells in `train.ipynb` from top to bottom. This will train a new PINN model and save the results (model weights and loss history) into the `pdes/ACCH/models/` directory.
 
