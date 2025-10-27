@@ -1,6 +1,6 @@
 # Example: Allen-Cahn and Cahn-Hilliard (ACCH) System
 
-This directory contains a complete example of using the `pinn_toolkit` to solve the coupled Allen-Cahn and Cahn-Hilliard (ACCH) equations. The goal is to train a parameterized PINN that can predict the solution for various physical parameters.
+This directory contains a complete example of using the `pinn_toolkit` to train the parameterized parameterized PINN for the 1D coupled Allen-Cahn and Cahn-Hilliard (ACCH) equations. Note that the user are expected to define their own `model.py`, 'residual.py`.
 
 ---
 
@@ -30,8 +30,8 @@ The key files in this example are:
 
 It is assumed you have already followed the installation instructions in the main `README.md` file and have activated the `jax-pinn-env` Conda environment.
 
-1.  **(Optional) Generate Your Own Data:** If you wish to create a new reference dataset, run the cells in `generate_data.ipynb`. This can be computationally intensive. Pre-generated data may be provided separately.
+1.  ** (Required) Generate Your Own Data:** Please run the cells in `generate_data.ipynb` to generate the data for validation. Otherwise disable the validation option to avoid any potenital errors. The robustness will be improved in the future.
 
 2.  **Train the Model:** Open and run the cells in `train.ipynb` from top to bottom. This will train a new PINN model and save the results (model weights and loss history) into the `pdes/ACCH/models/` directory.
 
-3.  **Analyze the Results:** Once training is complete, run the cells in `validation.ipynb` to see a detailed performance analysis of the model you just trained.
+3.  **Analyze the Results:** Once training is complete, run the cells in `validation.ipynb` to see a detailed performance analysis of the model you just trained, some sample plots are stored inside plots.
