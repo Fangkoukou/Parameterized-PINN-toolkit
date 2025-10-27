@@ -43,7 +43,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 # --- Local Project Modules ---
-from util import load_h5, load_model, load_pytree
+from .util import load_h5, load_model, load_pytree
 
 # ==============================================================================
 # 2. Model Discovery
@@ -310,113 +310,107 @@ def evaluate_model_performance(h5file, base_model, names=None, methods=None, siz
 # 4. Plotting Helper Functions
 # ==============================================================================
 
-
-def _load_and_process_loss_data(loss_path, line_loss_keys, scatter_loss_keys):
-    """Loads loss data and calculates a robust geometric mean for line plots."""
-    try:
-        loss_data = load_pytree(loss_path)
-        if not loss_data:
-            raise ValueError("Loaded data is empty.")
-
-        line_losses = {k: loss_data.get(k) for k in line_loss_keys}
-        scatter_losses = {k: loss_data.get(k) for k in scatter_loss_keys}
-
-        # Calculate geometric mean of line losses for a single, robust metric
-        valid_components = [np.asarray(v) for v in line_losses.values() if v is not None and len(v) > 0]
-        if valid_components:
-            min_len = min(len(arr) for arr in valid_components)
-            stacked = np.stack([arr[:min_len] for arr in valid_components])
-            line_losses['geom_loss'] = np.prod(stacked, axis=0) ** (1.0 / len(valid_components))
-
-        return {'line': line_losses, 'scatter': scatter_losses}
-    except Exception as e:
-        print(f"\n[WARNING] Failed to load/process {os.path.basename(loss_path)}: {e}")
-        return None
-
-
-def _setup_plot(title, ylabel, figsize=(15, 9)):
-    """Initializes a matplotlib figure and axis with standard settings."""
-    fig, ax = plt.subplots(figsize=figsize)
-    ax.set_title(title, fontsize=16, pad=15)
-    ax.set_ylabel(ylabel, fontsize=12)
-    ax.set_xlabel("Epoch / Iteration", fontsize=12)
-    return fig, ax
-
-
-def _finalize_and_save_plot(fig, ax, save_path, log_scale, legend_kwargs=None):
-    """Applies final touches to a plot (legend, grid, scale) and saves it."""
-    if log_scale:
-        ax.set_yscale('log')
-    ax.grid(True, which="both", ls="--", alpha=0.6)
-
-    handles, labels = ax.get_legend_handles_labels()
-    if handles:
-        # Remove duplicate legend entries
-        by_label = dict(zip(labels, handles))
-        ax.legend(by_label.values(), by_label.keys(), **(legend_kwargs or {}))
-
-    fig.tight_layout()
-    if save_path:
-        os.makedirs(os.path.dirname(save_path), exist_ok=True)
-        plt.savefig(save_path, dpi=150, bbox_inches='tight')
-        print(f"Saved plot to {save_path}")
-
-
-# ==============================================================================
-# 5. Results Visualization
-# ==============================================================================
-
-
-def avg_err_metric_dotplot(summary, names, methods, sizes, output_keys, plot_name, log_scale=False, out_dir="plots", metrics=None):
+def avg_err_metric_dotplot(summary, names, methods, sizes, plot_name, log_scale=False, out_dir="plots"):
     """
-    Generates dot plots comparing average error metrics across model families.
+    Generates and saves dot plots comparing model error metrics across different seeds.
 
-    Each dot represents a single training run (seed), and the horizontal bar
-    shows the mean performance for that model family.
+    This function takes a summary dictionary of model performance and creates
+    dot plots for L1, L2, and Linf error metrics for variables 'phi' and 'c'.
+    Each point on the plot represents the error from a single training seed,
+    and a horizontal line indicates the mean error across seeds for that
+    model configuration.
+
+    Args:
+        summary (dict): A dictionary where keys are model run identifiers and
+            values are dictionaries containing performance metrics, including
+            'avg_loss_phi' and 'avg_loss_c'.
+        names (list[str]): A list of model setup names to include in the plot.
+        methods (list[str]): A list of method/solver names to include.
+        sizes (list[int]): A list of training data sizes to include.
+        plot_name (str): The base name for the output plot files.
+        log_scale (bool, optional): If True, the y-axis will be on a log scale.
+            Defaults to False.
+        out_dir (str, optional): The directory where plots will be saved.
+            Defaults to "plots".
     """
-    if metrics is None:
-        metrics = ["L1", "L2", "Linf"]
     os.makedirs(out_dir, exist_ok=True)
+    
+    grouped = defaultdict(lambda: {"phi": {"L1": [], "L2": [], "Linf": []},
+                                   "c":   {"L1": [], "L2": [], "Linf": []}})
 
-    # --- Group results by model family ---
-    grouped = defaultdict(lambda: {var: {metric: [] for metric in metrics} for var in output_keys})
+    # --- MODIFICATION: Use robust parsing instead of a faulty regex ---
     for key, val in summary.items():
+        # Parse the key from right to left by splitting
         try:
-            base, size_str, _ = key.rsplit('_', 2)
+            # e.g., "train_setup_2_grid_inner_5_seed" ->
+            # base = "train_setup_2_grid_inner"
+            # size_str = "5"
+            # train_seed = "seed"
+            base, size_str, train_seed = key.rsplit('_', 2)
             size = int(size_str)
-            found_method, name = next(((m, base.removesuffix(f"_{m}")) for m in sorted(methods, key=len, reverse=True) if base.endswith(f"_{m}")), (None, None))
-            if not found_method or (names and name not in names) or (sizes and size not in sizes):
-                continue
-
-            group_key = f"{name}_{found_method}_{size}"
-            for var in output_keys:
-                for metric in metrics:
-                    if f'avg_loss_{var}' in val and metric in val[f'avg_loss_{var}']:
-                        grouped[group_key][var][metric].append(val[f'avg_loss_{var}'][metric])
         except ValueError:
+            # Skip keys that don't match the expected format
             continue
 
-    # --- Plotting ---
-    sizes.sort()
-    group_order = [f"{name}_{method}_{size}" for name in names for size in sizes for method in methods]
-    group_labels = [f"{method.upper()}_{size}" for _ in names for size in sizes for method in methods]
-    colors = {var: color for var, color in zip(output_keys, plt.get_cmap('tab10').colors)}
+        # Now, find the method from the end of the 'base' string
+        found_method = None
+        name = None
+        # Sort methods by length (desc) to handle cases like 'solver' and 'fast_solver'
+        for method in sorted(methods, key=len, reverse=True):
+            if base.endswith(f"_{method}"):
+                found_method = method
+                name = base.removesuffix(f"_{method}")
+                break
+        
+        if not found_method:
+            continue
 
-    for metric in metrics:
-        fig, axes = plt.subplots(1, len(output_keys), figsize=(7 * len(output_keys), 6), sharey=True)
-        axes = [axes] if len(output_keys) == 1 else axes
+        # Filter based on user-provided names, methods, and sizes
+        if (names and name not in names) or \
+           (methods and found_method not in methods) or \
+           (sizes and size not in sizes):
+            continue
+
+        # The key for grouping models of the same configuration but different seeds
+        group_key = f"{name}_{found_method}_{size}"
+        
+        for var in ["phi", "c"]:
+            for metric in ["L1", "L2", "Linf"]:
+                avg_loss = val[f'avg_loss_{var}'][metric]
+                grouped[group_key][var][metric].append(avg_loss)
+
+    # --- PLOTTING LOGIC (No changes needed here) ---
+    
+    sizes.sort()
+    # Define the order and labels for the x-axis ticks
+    # MODIFICATION: Use the correct method variable name
+    group_order = [f"{name}_{method}_{size}" for name in names for size in sizes for method in methods]
+    group_labels = [f"{method.upper()}_{size}" for name in names for size in sizes for method in methods]
+    
+    colors = {"phi": "tab:blue", "c": "tab:orange"}
+
+    for metric in ["L1", "L2", "Linf"]:
+        fig, axes = plt.subplots(1, 2, figsize=(14, 6), sharey=True)
         fig.suptitle(f"{plot_name} ({metric} Error)", fontsize=16)
 
-        for ax, var in zip(axes, output_keys):
+        for ax, var in zip(axes, ["phi", "c"]):
+            has_data = False
+            # Define x_ticks based on the a pre-defined group order
             x_ticks = {group: i for i, group in enumerate(group_order)}
+            
             for group, data in grouped.items():
-                if group in x_ticks and data[var][metric]:
-                    i = x_ticks[group]
-                    y_values = data[var][metric]
-                    # Plot individual runs as dots
-                    ax.scatter(np.full(len(y_values), i), y_values, alpha=0.6, color=colors[var], label=var)
-                    # Plot mean as a horizontal line
-                    ax.hlines(np.mean(y_values), i - 0.25, i + 0.25, colors=colors[var], lw=2.5)
+                if group in x_ticks:
+                    i = x_ticks[group] # Get the pre-defined position for this group
+                    if data[var][metric]:
+                        y_values = data[var][metric]
+                        x_values = np.full(len(y_values), i)
+                        
+                        ax.scatter(x_values, y_values, alpha=0.6, color=colors[var], label=var if not has_data else "")
+                        
+                        mean_across_seeds = np.mean(y_values)
+                        ax.hlines(mean_across_seeds, i - 0.25, i + 0.25, colors=colors[var], linewidth=2.5)
+                        
+                        has_data = True
 
             ax.set_xticks(range(len(group_order)))
             ax.set_xticklabels(group_labels, rotation=45, ha='right')
@@ -425,105 +419,272 @@ def avg_err_metric_dotplot(summary, names, methods, sizes, output_keys, plot_nam
             if log_scale:
                 ax.set_yscale("log")
             ax.grid(True, linestyle="--", alpha=0.5)
+            if has_data:
+                ax.legend()
 
         fig.tight_layout(rect=[0, 0.03, 1, 0.94])
+        
         out_path = os.path.join(out_dir, f"{plot_name}_{metric}_dotplot.png")
         plt.savefig(out_path, dpi=150, bbox_inches='tight')
-        print(f"Saved dot plot to {out_path}")
-        plt.show() if metric == "L2" else plt.close(fig)
+        print(f"Saved plot to {out_path}")
 
+        # Choose which plot to show interactively
+        if metric == "L2":
+            plt.show()
+        else:
+            plt.close(fig)
 
-def plot_loss_history(names, methods, sizes, line_loss_keys, scatter_loss_keys, models_dir="models", skip1=10, skip2=5, log_scale=True):
+def _load_and_process_loss_data(loss_path):
     """
-    Generates an individual loss history plot for each discovered model run.
+    Loads and processes loss data from a single pytree file.
+
+    This function attempts to load a pytree from the given path. It extracts
+    various loss components ('ic', 'bc', 'ac', 'ch', 'data') and calculates their
+    true geometric mean, provided all five components are present. It also
+    extracts scatter loss data ('L2_phi', 'L2_c').
+
+    Args:
+        loss_path (str): The file path to the saved loss data.
+
+    Returns:
+        dict | None: A dictionary containing 'line' and 'scatter' loss data,
+            or None if the file fails to be processed. The 'geom_loss' key
+            is added to the 'line' dictionary if calculation is successful.
+    """
+    try:
+        loss_data = load_pytree(loss_path)
+        component_keys = ['ic', 'bc', 'ac', 'ch', 'data']
+        line_losses = {k: loss_data.get(k) for k in component_keys}
+        
+        # --- NEW: Calculate true geometric mean based on user guarantee ---
+        components = [np.asarray(line_losses.get(k)) for k in component_keys]
+        
+        # Check if all 5 components are present and valid before calculating
+        if all(c is not None and c.ndim > 0 for c in components):
+            stacked_components = np.stack(components)
+            # Calculate product along the component axis, then take the 5th root
+            line_losses['geom_loss'] = np.prod(stacked_components, axis=0) ** 0.2
+        else:
+            print(f"\n[INFO] Skipping geometric mean for {os.path.basename(loss_path)} due to missing components.")
+
+        scatter_losses = {k: loss_data.get(k) for k in ['L2_phi', 'L2_c']}
+        return {'line': line_losses, 'scatter': scatter_losses}
+    except Exception as e:
+        print(f"\n[WARNING] Failed to process {os.path.basename(loss_path)}: {e}")
+        return None
+
+def _setup_plot(title, ylabel, figsize=(15, 9)):
+    """
+    Initializes a Matplotlib figure and axes for plotting.
+
+    Args:
+        title (str): The title for the plot.
+        ylabel (str): The label for the y-axis.
+        figsize (tuple, optional): The size of the figure. Defaults to (15, 9).
+
+    Returns:
+        tuple: A tuple containing the Matplotlib figure and axes objects
+            (fig, ax).
+    """
+    fig, ax = plt.subplots(figsize=figsize)
+    ax.set_title(title, fontsize=16, pad=15)
+    ax.set_ylabel(ylabel, fontsize=12)
+    ax.set_xlabel("Epoch / Iteration", fontsize=12)
+    return fig, ax
+
+def _finalize_and_save_plot(fig, ax, save_path, log_scale, legend_kwargs=None, tight_layout_rect=None):
+    """
+    Applies final styling to a plot, adds a legend, and saves it to a file.
+
+    Args:
+        fig (matplotlib.figure.Figure): The figure object to finalize.
+        ax (matplotlib.axes.Axes): The axes object to finalize.
+        save_path (str): The full path where the plot image will be saved.
+        log_scale (bool): If True, the y-axis is set to a logarithmic scale.
+        legend_kwargs (dict, optional): Additional arguments to pass to the
+            ax.legend() function. Defaults to None.
+        tight_layout_rect (list, optional): The rectangle (left, bottom, right, top)
+            for fig.tight_layout(). Defaults to None.
+    """
+    if log_scale:
+        ax.set_yscale('log')
+    ax.grid(True, which="both", ls="--", alpha=0.6)
+    
+    handles, labels = ax.get_legend_handles_labels()
+    if handles:
+        ax.legend(handles, labels, **(legend_kwargs or {"fontsize": 12}))
+
+    fig.tight_layout(rect=tight_layout_rect)
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    plt.savefig(save_path, dpi=150, bbox_inches='tight')
+
+# ==============================================================================
+# === Main Plotting Functions ==================================================
+# ==============================================================================
+
+def plot_loss_history(names, methods, sizes, models_dir="models", 
+                      skip1=10, skip2=5, log_scale=True):
+    """
+    Generates and saves loss history plots for individual model runs.
+
+    This function finds all model runs matching the specified criteria (names,
+    methods, sizes) and generates a separate loss history plot for each one.
+    Each plot shows the evolution of different loss components over training
+    epochs/iterations.
+
+    Args:
+        names (list[str]): A list of model setup names to plot.
+        methods (list[str]): A list of method/solver names to plot.
+        sizes (list[int]): A list of training data sizes to plot.
+        models_dir (str, optional): The base directory where model outputs are
+            stored. Defaults to "models".
+        skip1 (int, optional): The step size for subsampling line plot data to
+            reduce plot density. Defaults to 10.
+        skip2 (int, optional): The step size for subsampling scatter plot data.
+            Defaults to 5.
+        log_scale (bool, optional): If True, the y-axis of the plots will be on
+            a log scale. Defaults to True.
     """
     sns.set_theme(style="whitegrid", palette="deep")
     print("=" * 60, "\nStarting individual loss history plotting...")
     model_paths_info = find_model_paths(models_dir, names=names, methods=methods, sizes=sizes)
+    
     if not model_paths_info:
         print("[WARNING] Found 0 models. Aborting.")
         return
 
-    markers = {key: m for key, m in zip(scatter_loss_keys, ['o', 'X', 's', '^', 'P', '*', 'D'])}
+    print(f"Found {len(model_paths_info)} models. Generating plots...")
     start_time, plots_generated = time.perf_counter(), 0
 
     for idx, model_info in enumerate(model_paths_info, start=1):
-        if not model_info.get('loss_path'):
-            continue
-
+        if not model_info['loss_path']: continue
+        
         model_name = f"{model_info['name']}_{model_info['method']}_{model_info['size']}_{model_info['param_seed']}_{model_info['train_seed']}"
-        print(f"Progress: {idx}/{len(model_paths_info)} | Plotting: {model_name}...", end='\r', flush=True)
+        print(f"Progress: {idx}/{len(model_paths_info)} | Processing: {model_name}...", end='\r', flush=True)
+        
+        losses = _load_and_process_loss_data(model_info['loss_path'])
+        if not losses: continue
 
-        losses = _load_and_process_loss_data(model_info['loss_path'], line_loss_keys, scatter_loss_keys)
-        if not losses:
-            continue
+        title = f"Loss History: {model_name}" + (" (Log Scale)" if log_scale else "")
+        ylabel = "Loss Value" + (" (Log Scale)" if log_scale else "")
+        fig, ax = _setup_plot(title, ylabel)
 
-        fig, ax = _setup_plot(f"Loss History: {model_name}", "Loss Value", figsize=(12, 8))
-
+        # Plot all line losses, including the new 'geom_loss'
         for name, data in losses['line'].items():
-            if data is not None and len(data) > 0:
-                ax.plot(np.arange(len(data))[::skip1], data[::skip1], label=name, alpha=0.9)
+            if data is not None and data.ndim > 0:
+                ax.plot(np.arange(len(data))[::skip1], data[::skip1], label=name, alpha=0.9, zorder=1)
 
+        markers = {'L2_phi': 'o', 'L2_c': 'X'}
         for name, data in losses['scatter'].items():
-            if data is not None and len(data) > 0:
-                ax.scatter(np.arange(len(data))[::skip2], data[::skip2], label=name, marker=markers.get(name, 'v'), s=50, alpha=0.8)
-
+            if data is not None and data.ndim > 0:
+                valid_indices = np.where(~np.isnan(data))[0]
+                if len(valid_indices) > 0:
+                    plot_indices = valid_indices[::skip2]
+                    ax.scatter(plot_indices, data[plot_indices], label=name, marker=markers[name], s=50, alpha=0.8, zorder=2)
+        
         save_path = os.path.join(os.path.dirname(model_info['loss_path']), f"loss_history_{model_name}.png")
         _finalize_and_save_plot(fig, ax, save_path, log_scale)
         plt.close(fig)
         plots_generated += 1
-
+            
     total_time = time.perf_counter() - start_time
-    print(f"\n" + "=" * 60, f"\nFinished. Generated {plots_generated} plots in {total_time:.2f}s.")
+    print("\n" + "=" * 60, "\nFinished plotting.")
+    if plots_generated > 0:
+        print(f"Generated {plots_generated} plots in {total_time:.2f}s ({total_time / plots_generated:.3f}s/plot).")
+    else:
+        print("No plots were generated.")
+    print("=" * 60)
 
-
-def aggregated_loss_history(names, methods, sizes, line_loss_keys, scatter_loss_keys, primary_line_key, models_dir, plot_name, out_dir="plots", skip1=10, skip2=5, log_scale=True):
+def aggregated_loss_history(names, methods, sizes, models_dir, plot_name, out_dir="plots",
+                            skip1=10, skip2=5, log_scale=True):
     """
-    Generates a single plot aggregating the loss histories of model families.
+    Generates a single plot showing the aggregated loss history for model families.
 
-    This function averages the loss curves from all runs of a given model family
-    (e.g., same name, method, size) to show a representative training trend.
+    This function groups models by their configuration (name, method, size) and
+    calculates the average loss across different training seeds for each group.
+    It then plots these averaged loss curves on a single figure for easy
+    comparison between model families.
+
+    Args:
+        names (list[str]): A list of model setup names to include.
+        methods (list[str]): A list of method/solver names to include.
+        sizes (list[int]): A list of training data sizes to include.
+        models_dir (str): The base directory where model outputs are stored.
+        plot_name (str): The file name for the output plot (without extension).
+        out_dir (str, optional): The directory where the plot will be saved.
+            Defaults to "plots".
+        skip1 (int, optional): The step size for subsampling line plot data.
+            Defaults to 10.
+        skip2 (int, optional): The step size for subsampling scatter plot data.
+            Defaults to 5.
+        log_scale (bool, optional): If True, the y-axis will be on a log scale.
+            Defaults to True.
     """
     sns.set_theme(style="whitegrid", palette="deep")
     print("=" * 60, "\nStarting aggregated loss history plotting...")
     model_paths_info = find_model_paths(models_dir, names=names, methods=methods, sizes=sizes)
+    
     if not model_paths_info:
         print("[WARNING] Found 0 models. Aborting.")
         return
 
-    # Group model runs by their "family" (name, method, size)
     grouped_models = defaultdict(list)
     for info in model_paths_info:
-        if info.get('loss_path'):
+        if info['loss_path']:
             grouped_models[f"{info['name']}_{info['method']}_{info['size']}"].append(info['loss_path'])
 
-    fig, ax = _setup_plot(f"Aggregated Loss History: {plot_name}", "Average Loss Value", figsize=(16, 10))
+    print(f"Found {len(model_paths_info)} models across {len(grouped_models)} families.")
+
+    title = f"Aggregated Loss History: {plot_name}" + (" (Log Scale)" if log_scale else "")
+    ylabel = "Average Loss Value" + (" (Log Scale)" if log_scale else "")
+    fig, ax = _setup_plot(title, ylabel, figsize=(16, 10))
+    
     color_palette = sns.color_palette("husl", len(grouped_models))
-    markers = {key: m for key, m in zip(scatter_loss_keys, ['o', 'X', 's', '^', 'P', '*', 'D'])}
+    markers = {'L2_phi': 'o', 'L2_c': 'X'}
 
     for i, (family_key, paths) in enumerate(grouped_models.items()):
+        # --- FINAL FIX: Use the base color directly. Do not manipulate it. ---
         base_color = color_palette[i]
-        family_losses = [data for path in paths if (data := _load_and_process_loss_data(path, line_loss_keys, scatter_loss_keys))]
-        if not family_losses:
-            continue
 
-        # Aggregate and plot the primary line loss (e.g., 'geom_loss')
-        line_arrays = [d['line'].get(primary_line_key) for d in family_losses if d['line'].get(primary_line_key) is not None]
-        if line_arrays:
-            min_len = min(len(arr) for arr in line_arrays)
-            avg_loss = np.nanmean([arr[:min_len] for arr in line_arrays], axis=0)
-            ax.plot(np.arange(min_len)[::skip1], avg_loss[::skip1], label=f"{family_key} ({primary_line_key})", color=base_color, lw=2.5)
+        family_losses = [data for path in paths if (data := _load_and_process_loss_data(path))]
+        if not family_losses: continue
 
-        # Aggregate and plot all specified scatter losses
-        for loss_name in scatter_loss_keys:
-            scatter_arrays = [d['scatter'].get(loss_name) for d in family_losses if d['scatter'].get(loss_name) is not None]
-            if scatter_arrays:
-                min_len = min(len(arr) for arr in scatter_arrays)
-                avg_loss = np.nanmean([arr[:min_len] for arr in scatter_arrays], axis=0)
-                ax.scatter(np.arange(min_len)[::skip2], avg_loss[::skip2], label=f"{family_key} ({loss_name})", marker=markers.get(loss_name, 'v'), color=base_color, s=60, alpha=0.9, edgecolor='black', lw=0.5)
+        geom_loss_arrays = [d['line']['geom_loss'] for d in family_losses if d['line'].get('geom_loss') is not None]
+        
+        if geom_loss_arrays:
+            min_len = min(len(arr) for arr in geom_loss_arrays)
+            if min_len > 0:
+                avg_geom_loss = np.nanmean([np.asarray(arr)[:min_len] for arr in geom_loss_arrays], axis=0)
+                print(f"[PLOT] Plotting LINE for '{family_key} (Geom)' with {len(avg_geom_loss[::skip1])} points.")
+                # Use the robust base_color
+                ax.plot(np.arange(len(avg_geom_loss))[::skip1], avg_geom_loss[::skip1], label=f"{family_key} (Geom)", color=base_color, lw=2.5, zorder=1)
+        else:
+            print(f"[INFO] No 'geom_loss' data found for family '{family_key}'. Skipping line plot.")
 
+        for loss_name in ['L2_phi', 'L2_c']:
+            scatter_arrays = [d['scatter'][loss_name] for d in family_losses if d['scatter'].get(loss_name) is not None]
+            if not scatter_arrays:
+                continue
+
+            min_len = min(len(arr) for arr in scatter_arrays)
+            if min_len == 0: continue
+
+            padded = [np.pad(np.asarray(a), (0, min_len - len(a)), 'constant', constant_values=np.nan) if len(a) < min_len else np.asarray(a)[:min_len] for a in scatter_arrays]
+            
+            avg_loss = np.nanmean(np.asarray(padded), axis=0)
+            
+            valid_indices = np.where(~np.isnan(avg_loss))[0]
+            if len(valid_indices) > 0:
+                plot_indices = valid_indices[::skip2]
+                print(f"[PLOT] Plotting SCATTER for '{family_key} ({loss_name})' with {len(plot_indices)} points.")
+                # Use the robust base_color
+                ax.scatter(plot_indices, avg_loss[plot_indices], label=f"{family_key} ({loss_name})",
+                           marker=markers[loss_name], color=base_color, s=60, alpha=0.9, edgecolor='black', linewidth=0.5, zorder=2)
+
+    save_path = os.path.join(out_dir, f"{plot_name}.png")
     legend_kwargs = {"fontsize": 11, "title": "Model Family", "bbox_to_anchor": (1.04, 1), "loc": "upper left"}
-    save_path = os.path.join(out_dir, f"{plot_name}_aggregated_loss.png")
-    _finalize_and_save_plot(fig, ax, save_path, log_scale, legend_kwargs)
+    _finalize_and_save_plot(fig, ax, save_path, log_scale, legend_kwargs=legend_kwargs, tight_layout_rect=[0, 0, 0.85, 1])
+    
+    print("-" * 60, f"\nSaved aggregated plot to: {save_path}\n", "=" * 60)
     plt.show()
     plt.close(fig)
