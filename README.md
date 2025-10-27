@@ -92,17 +92,6 @@ A comprehensive suite for post-hoc analysis of large-scale experiments.
 
 This folder demonstrates how to **use** the `pinn_toolkit` to solve a specific problem: the coupled 1D Allen-Cahn and Cahn-Hilliard (ACCH) equations. Given most if not all innovations/studies on PINN focus on model architecture, residual and loss functions, and training strategy, we believe it is best for the users to specify their own ``model`` and ``residual`` modules. A generic blueprint is set up for the 1D ACCH equation and can be easily modified to accomodate different PDEs. Please see the files in pdes/ACCH for detail.
 
--   **`model.py`**: Defines the core `PINN` class, which is the neural network itself. It is built as an `equinox.Module`, integrating seamlessly with JAX's functional paradigm. **This is the main module to customize for new mode architectures.**
--   **`residual.py`**: Defines the physics of the problem by translating PDEs, ICs, and BCs into trainable residuals. **This is the main module to customize for new PDEs.**
--   **`pde_dimless.py`**: A PDE class defining the non-dimensionalized ACCH system, built on `diffrax`. Its primary role is to generate ground-truth data for training and validation.
--   **`interactive_pde_suite.py`**: A powerful tool for real-time exploration of a Cahn-Hilliard/Allen-Cahn PDE system. Can be used to compare the numerical PDE solution against a trained PINN model to visually assess the model's accuracy across different physical parameters.
--   **`generate_data.py`**: A module dedicated to solving the 1D ACCH PDE system under different parameters (e.g. `L`: mobility parameter, `M`: diffusivity parameter) using parallel computing.
--   **`train.ipynb`**: The main training notebook. It shows how to import components from `pinn_toolkit` to define the model, set up the loss functions, and run the training engine.
--   **`validation.ipynb`**: An example notebook that uses the analysis suite from `pinn_toolkit/validation.py` to evaluate trained models and generate plots comparing multiple runs.
--   **Other Notebooks**: Includes notebooks for generating data (`generate_data.ipynb`) and interactively exploring the PDE solutions (`interactive_pde_demo.ipynb`).
-
----
-
 ## License
 
 This project is licensed under the MIT License. See the `LICENSE` file for details.
