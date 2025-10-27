@@ -1,0 +1,37 @@
+# The name of the conda environment that will be created
+name: jax-pinn-env
+
+# The channels to search for packages, in order of priority
+channels:
+  - nvidia      # For CUDA-enabled packages
+  - conda-forge # For a wide range of scientific packages
+  - defaults
+
+# The list of dependencies
+dependencies:
+  # 1. Core Python version
+  - python>=3.11
+
+  # 2. Core Scientific Computing & Data Handling (managed by Conda)
+  - numpy
+  - scipy
+  - h5py
+
+  # 3. JAX with CUDA support (from the 'nvidia' channel)
+  - jax
+  - jaxlib=*cuda* # This wildcard tells conda to grab a CUDA-enabled version
+  
+  # 4. Visualization & Utilities
+  - matplotlib
+  - seaborn
+  - tqdm
+  - jupyterlab # For running the notebooks
+  
+  # 5. PDE Solver
+  - diffrax
+
+  # 6. Pip packages (for pure-python libraries in the JAX ecosystem)
+  - pip
+  - pip:
+    - equinox
+    - optax

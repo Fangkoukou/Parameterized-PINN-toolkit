@@ -1,0 +1,55 @@
+# ==============================================================================
+# 1. Project-Specific Data, Models, and Plots (Scalable Method)
+#    This uses a wildcard (*) to ignore these folders in ANY subdirectory
+#    of `pdes`. This is future-proof for when you add new PDE projects.
+# ==============================================================================
+pdes/*/data/
+pdes/*/models/
+pdes/*/plots/
+
+
+# ==============================================================================
+# 2. Archive Folder (Scalable Method)
+#    Uncomment the line below if you do NOT want to track the old/experimental
+#    code in your version history for ANY of your PDE projects.
+# ==============================================================================
+# pdes/*/_archive/
+
+
+# ==============================================================================
+# 3. Python Build Artifacts and Cache
+#    These files are generated automatically and should never be tracked.
+# ==============================================================================
+# Build artifacts from installing your package
+src/pinn_toolkit.egg_info/
+build/
+dist/
+*.egg-info/
+
+# General Python cache
+__pycache__/
+*.pyc
+
+
+# ==============================================================================
+# 4. Jupyter Notebook Checkpoints
+#    Jupyter creates this folder automatically to store recovery versions.
+# ==============================================================================
+.ipynb_checkpoints/
+
+
+# ==============================================================================
+# 5. Virtual Environments
+#    Never track the contents of a virtual environment folder.
+# ==============================================================================
+venv/
+.venv/
+.env/
+
+
+# ==============================================================================
+# 6. IDE / Editor Configuration
+#    User-specific settings for editors like VS Code or PyCharm.
+# ==============================================================================
+.vscode/
+.idea/
