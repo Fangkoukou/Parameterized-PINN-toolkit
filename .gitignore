@@ -4,8 +4,8 @@
 #    of `pdes`. This is future-proof for when you add new PDE projects.
 # ==============================================================================
 pdes/*/data/
-pdes/*/models/
-pdes/*/plots/
+# pdes/*/models/
+# pdes/*/plots/
 
 
 # ==============================================================================
